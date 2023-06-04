@@ -8,7 +8,7 @@ authors:
 category: Standard
 type: Core
 status: Draft
-created:  2023-05-30
+created: 2023-05-30
 feature: (fill in with feature tracking issues once accepted)
 ---
 
@@ -216,3 +216,6 @@ While this SIMD greatly reduces the user's trust in an RPC, the light client wil
  We plan to solve these problems in future SIMDs to provide a full trustless setup
  including data availability sampling and fraud proving which will only require a
  single honest full node.
+
+
+## Backwards Compatibility *(Optional)*
