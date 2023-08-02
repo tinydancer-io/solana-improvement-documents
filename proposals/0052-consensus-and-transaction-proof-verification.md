@@ -1,10 +1,10 @@
 ---
 simd: '0052'
-title: Consensus and Transaction Proof Verification
+title: Transaction Receipts and Receipt tree for Light clients
 authors:
-  - Harsh Patel (Tinydancer)
   - Anoushk Kharangate (Tinydancer)
-  - x19 (Tinydancer)
+  - Harsh Patel (Tinydancer)
+  - Richard Patel (Jump Firedancer)
 category: Standard
 type: Core
 status: Draft
@@ -18,12 +18,9 @@ This SIMD describes the overall design and changes required that allows users to
 verify that a supermajority of the validators has voted on the slot that their
 transaction was included in the block without fully trusting the RPC provider.
 
-This includes two main changes:
-
-1) Adding a new RPC method which provides a proof that a transaction has been
-   included in a slot
-2) Modifying the blockhash to be computed as a Merkle Tree and
-   includes transaction statuses
+The main change includes:
+  -  Modifying the bankhash to add a Receipt root of the receipt merkle tree that
+	  includes transaction signatures and statuses. 
 
 This SIMD is the first step in implementing a consensus verifying client as first
 described in [SIMD #10](https://github.com/solana-foundation/solana-improvement-documents/pull/10)
@@ -53,149 +50,53 @@ None
 
 ## New Terminology
 
-TransactionProof: A structure containing necessary information to verify if a
-transaction was included in the bank hash of a slot.
-
-```rs
-// new RPC struct to verify tx inclusion
-pub struct TransactionProof {
-  pub proof: Vec<Hash>,
-  pub parent_hash: Hash,
-  pub accounts_delta_hash: Hash,
-  pub signature_count_buf: [u8; 8],
-}
-```
-
-The proof variable will provide a Merkle hashpath from the transaction to the blockhash;
-which is then used with the other variables to compute the bankhash.
+Receipt: A structure containing transaction signature and its execution status.
+Receipt root: The root hash of a binary merkle tree of Receipts.
 
 ## Detailed Design
 
-The protocol interaction will be as follows:
+### Modifying the Bankhash
 
-- A user sends a transaction and it lands in slot N
-- The user requests proof that the transaction is included in slot N using
-  the new RPC method
-- The user verifies that the proof includes the transaction signature
-  and a success status
-- The user constructs the merkle tree to derive the root hash
-- The user computes the expected bankhash using the root hash, `parent_hash`,
-  `accounts_delta_hash` and `signature_count`
-- The user retrieves the epoch’s current validator set and stake amounts from
-  a trusted source (making this step trustless is future work)
-- The user requests blocks from slots > N (up to 32 slots past N given the
-  32 block depth finality)
-- The user parses vote transactions from the blocks, verifying their signature,
-  and computing the sum of stake which voted on
-  the bankhash they computed in step 3
-- If the sum of stake is greater than or equal to 2/3 of the total stake then
-  their transaction has been finalized under a supermajority trust assumption
-  (making this assumption require only a single honest validator is also future work)
-
-### Modifying the Blockhash
-
-We propose modifying the blockhash computation to:
-
-1) Compute the blockhash using a Merkle Tree of entries
-2) Include the status (either succeeding or failing) of each transaction
-   in each Entry leaf
-
-To produce the blockhash for a slot, the current implementation hashes Entries in
-a sequential way which requires a O(N) proof size to provide a hashpath from a
-transaction to a blockhash. Implementing change 1) would allow for a more efficient
-O(log(N)) proof size. The current Entry implementation already hashes transaction
-signatures using a Merkle Tree to get the Entry’s hash, so this change would only
-modify how the Entry’s hashes are hashed together to get a blockhash.
-
-For change 2), the blockhash is currently computed using only transaction signatures,
-and does not include transaction statuses which means we are unable to prove if
-a transaction has succeeded or failed. Implementing 2) would enable verifying
-a transactions status, as mentioned in the [accepted proposal](https://docs.solana.com/proposals/simple-payment-and-state-verification#transaction-merkle)
-and in a [previous github issue](https://github.com/solana-labs/solana/issues/7053)).
-
-Fig #1 shows an example hashpath from a transaction and its signature to a
-bankhash with both of the proposed changes implemented.
-![Fig #1](https://github.com/tinydancer-io/solana-improvement-documents/assets/32778608/5370950d-e27b-4c1b-9f04-6e9164789e65)
-
-#### New RPC Methods
-
-We also need a new RPC method to provide proofs to clients. This method would be
-called `get_transaction_proof` which would take a transaction signature as input
-and return a `TransactionProof` struct
-
-```rs
-// new RPC method
-pub async fn get_transaction_proof(&self, signature: Signature) -> Result<TransactionProof>;
-```
-
-Below is psuedocode of the RPC method:
-
-```rs
-async fn get_transaction_proof(&self, s: Signature) -> Result<TransactionProof> {
-  // first retrieve all the entries
-  let slot = self.get_slot_of_signature(&s);
-  let (entries, _, is_full) = 
-    self.blockstore.get_slot_entries_with_shred_info(slot, 0, false)  
-  // require all of the entries
-  assert!(is_full)
-
-  // compute the Merkle hashpath from the signature and status to the blockhash 
-  let proof = entries.get_merkle_proof(&s);
-
-  // get variables used to compute the bankhash
-  let bank_forks = self.bank_forks.read().unwrap();
-  let bank = bank_forks.get(slot);
-
-  let parent_hash = bank.parent_hash();
-  let accounts_delta_hash = bank
-      .rc
-      .accounts
-      .accounts_db
-      .calculate_accounts_delta_hash(slot).0;
-  let mut signature_count_buf = [0u8; 8];
-  LittleEndian::write_u64(&mut signature_count_buf[..], bank.signature_count());
-
-  Ok(TransactionProof{
-      proof,
-      parent_hash,
-      accounts_delta_hash,
-      signature_count_buf,
-  })
-}
-```
-
-Below is client pseudocode for verifying a transaction:
-
+We propose two new changes:
+1) Introduce a new data structure called `Receipt`
 ```rust
-let tx_sig = "..."; // tx signature of interest
-let slot = 19; // slot which includes the tx
-
-// call the new RPC
-let tx_proof: TransactionProof = get_tx_proof(&tx_sig, endpoint);
-
-// verify the transaction signature proof is valid and status is success
-let leaf = hash_leaf!([tx_sig, TxStatus::Success]);
-let verified = tx_proof.proof.verify_path(&leaf);
-assert!(verified);
-
-// compute the blockhash
-let last_blockhash = tx_proof.proof.get_root();
-
-// compute the expected bankhash
-let bankhash = hashv(&[
-    tx_proof.parent_hash.as_ref(),
-    tx_proof.accounts_delta_hash.as_ref(),
-    tx_proof.signature_count_buf.as_ref(),
-    last_blockhash.as_ref()
-]);
-
-// parse vote transactions and stake amounts on expected bankhash
-let (voted_stake_amount, total_stake_amount) = parse_votes_from_blocks(slot, bankhash)
-
-// validate supermajority voted for expected bankhash
-let supermajority_verified = 3 * voted_stake_amount >= 2 * total_stake_amount;
-assert!(supermajority_verified)
+  pub struct Receipt {
+    pub signature: [u8; 64],
+    pub status: u8,
+  }
 ```
+2) Add a transaction receipt root to the bankhash calculation where the receipt
+   root is the root of the merkle tree of receipts. This root would be a sha256
+   hash constructed as a final result of the binary merkle tree of receipts.
+   The receipt root would be added to the bankhash as follows:
+``` rust
+  let mut hash = hashv(&[
+  	self.parent_hash.as_ref(),
+  	accounts_delta_hash.0.as_ref(),
+  	receipt_root,
+  	&signature_count_buf,
+  	self.last_blockhash().as_ref(),
+  ]);
+```
+Note: The second change would initially be feature gated with a flag and can 
+be activated once we have enough consensus on the activation.
+
+Fig #1 shows an example receipt merkle tree constructed from the corresponding transactions.
+<img width="940" alt="Screenshot 2023-08-02 at 11 29 45 PM" src="https://github.com/tinydancer-io/solana-improvement-documents/assets/50767810/61e354f8-64ea-4b3f-a479-23c68741682c">
+
+
+#### Benchmarks
+
+We have performed benchmarks comparing two merkle tree implementations, 
+the benchmark was done on 1 million leaves:
+1) Solana labs merkle tree: This implementation uses the BLAKE3 hashing algorithm and is
+   implemented purely in rust which can be found in the [Solana labs repository](https://github.com/solana-labs/solana/tree/master/merkle-tree)
+2) Firedancer binary merkle tree (bmtree): Implemented in C and uses firedancer's
+   SHA-256 implementation as it's hashing algorithm. However the benchmarks were
+   performed using its rust FFI bindings. More details: [Firedancer](https://github.com/firedancer-io/firedancer/tree/main/src/ballet/bmtree)
+<img width="1010" alt="r1" src="https://github.com/tinydancer-io/solana-improvement-documents/assets/50767810/6c8d0013-1d62-4c7b-8264-4ec71ea28d7c">
+
+More details with an attached flamegraph can be found in our [repository](https://github.com/tinydancer-io/merkle-bench).
 
 ## Impact
 
@@ -203,9 +104,10 @@ This proposal will improve the overall security and decentralization of the Sola
 network allowing users to access the blockchain in a trust minimized way unlike
 traditionally where users had to fully trust their RPC providers. Dapp developers
 don't have to make any changes as wallets can easily integrate the client making
-it compatible with any dapp.
+it compatible with any dapp. 
 
 ## Security Considerations
+
 
 ### Trust Assumptions and Future Work
 
