@@ -22,11 +22,6 @@ The main change includes:
   -  Modifying the bankhash to add a Receipt root of the receipt merkle tree that
 	  includes transaction signatures and statuses. 
 
-This SIMD is the first step in implementing a consensus verifying client as first
-described in [SIMD #10](https://github.com/solana-foundation/solana-improvement-documents/pull/10)
-and a majority of the changes mentioned in
-the accepted [Simple Payment and State Verification Proposal](https://docs.solana.com/proposals/simple-payment-and-state-verification).
-
 ## Motivation
 
 Currently, for a user to validate whether their transaction is valid and included
@@ -42,7 +37,7 @@ the confirmation of their transaction without trusting the RPC.
 
 However, this is only the consensus verifying stage of the client, and with only
 these changes, the RPC provider can still trick users, hence we also discuss future
-work that will be implemented in futureSIMDs to provide a fully trustless setup.
+work that will be implemented in future SIMDs to provide a fully trustless setup.
 
 ## Alternatives Considered
 
