@@ -1,6 +1,6 @@
 ---
 simd: '0052'
-title: Transaction Receipts and Receipt tree for Light clients
+title: Adding receipt root to Bankhash
 authors:
   - Anoushk Kharangate (Tinydancer)
   - Harsh Patel (Tinydancer)
