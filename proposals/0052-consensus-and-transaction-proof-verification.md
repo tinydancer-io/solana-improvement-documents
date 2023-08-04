@@ -46,6 +46,7 @@ None
 ## New Terminology
 
 Receipt: A structure containing transaction signature and its execution status.
+
 Receipt root: The root hash of a binary merkle tree of Receipts.
 
 ## Detailed Design
@@ -54,7 +55,7 @@ Receipt root: The root hash of a binary merkle tree of Receipts.
 
 We propose two new changes:
 1) The receipt data structure and the receipt merkle tree which is formally
-   defined in this [SIMD](https://github.com/tinydancer-io/solana-improvement-documents)
+   defined in this [SIMD]([https://github.com/tinydancer-io/solana-improvement-documents](https://github.com/tinydancer-io/solana-improvement-documents/blob/transaction-receipt/proposals/0064-transaction-receipt.md))
 ```rust
   pub struct Receipt {
     pub signature: [u8; 64],
@@ -98,6 +99,10 @@ network allowing users to access the blockchain in a trust minimized way unlike
 traditionally where users had to fully trust their RPC providers. Dapp developers
 don't have to make any changes as wallets can easily integrate the client making
 it compatible with any dapp. 
+This proposal would also be compatible with the future protocol updates like 
+Bankless leaders since the tree construction would be done async by buffering 
+transaction statuses. Bankless leaders won't need replay before propagating 
+the block.
 
 ## Security Considerations
 
