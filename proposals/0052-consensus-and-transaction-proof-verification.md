@@ -99,7 +99,7 @@ network allowing users to access the blockchain in a trust minimized way unlike
 traditionally where users had to fully trust their RPC providers. Dapp developers
 don't have to make any changes as wallets can easily integrate the client making
 it compatible with any dapp. 
-This proposal would also be compatible with the future protocol updates like 
+The proposal would also be compatible with the future protocol updates like 
 Bankless leaders since the tree construction would be done async by buffering 
 transaction statuses. Bankless leaders won't need replay before propagating 
 the block.
