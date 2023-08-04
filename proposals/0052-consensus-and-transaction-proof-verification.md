@@ -53,7 +53,8 @@ Receipt root: The root hash of a binary merkle tree of Receipts.
 ### Modifying the Bankhash
 
 We propose two new changes:
-1) Introduce a new data structure called `Receipt`
+1) The receipt data structure and the receipt merkle tree which is formally
+   defined in this [SIMD](https://github.com/tinydancer-io/solana-improvement-documents)
 ```rust
   pub struct Receipt {
     pub signature: [u8; 64],
@@ -63,7 +64,8 @@ We propose two new changes:
 2) Add a transaction receipt root to the bankhash calculation where the receipt
    root is the root of the merkle tree of receipts. This root would be a sha256
    hash constructed as a final result of the binary merkle tree of receipts.
-   The receipt root would be added to the bankhash as follows:
+   Specifically it will be a 32 byte array. The receipt root would be added to
+   the bankhash as follows:
 ``` rust
   let mut hash = hashv(&[
   	self.parent_hash.as_ref(),
@@ -75,10 +77,6 @@ We propose two new changes:
 ```
 Note: The second change would initially be feature gated with a flag and can 
 be activated once we have enough consensus on the activation.
-
-Fig #1 shows an example receipt merkle tree constructed from the corresponding transactions.
-<img width="940" alt="Screenshot 2023-08-02 at 11 29 45 PM" src="https://github.com/tinydancer-io/solana-improvement-documents/assets/50767810/61e354f8-64ea-4b3f-a479-23c68741682c">
-
 
 #### Benchmarks
 
