@@ -14,12 +14,12 @@ feature: (fill in with feature tracking issues once accepted)
 
 ## Summary
 
-This SIMD describes the overall design and changes required that allows users to
-verify that a supermajority of the validators has voted on the slot that their
+This SIMD describes the changes required to allow users to
+verify that a supermajority of the stake has voted on the slot that their
 transaction was included in the block without fully trusting the RPC provider.
 
 The main change includes:
-  -  Modifying the bankhash to add a Receipt root of the receipt merkle tree that
+  -  Modifying the bankhash to add a Receipt Root of the receipt merkle tree that
 	  includes transaction signatures and statuses. 
 
 ## Motivation
@@ -35,10 +35,6 @@ exposing users to potential attacks from malicious nodes.
 This is where diet clients come in, users run the client to verify
 the confirmation of their transaction without trusting the RPC.
 
-However, this is only the consensus verifying stage of the client, and with only
-these changes, the RPC provider can still trick users, hence we also discuss future
-work that will be implemented in future SIMDs to provide a fully trustless setup.
-
 ## Alternatives Considered
 
 None
@@ -47,7 +43,7 @@ None
 
 Receipt: A structure containing transaction signature and its execution status.
 
-Receipt root: The root hash of a binary merkle tree of Receipts.
+Receipt Root: The root hash of a binary merkle tree of Receipts.
 
 ## Detailed Design
 
@@ -77,20 +73,24 @@ We propose two new changes:
   ]);
 ```
 Note: The second change would initially be feature gated with a flag and can 
-be activated once we have enough consensus on the activation.
+be activated once we have enough stake on the network with this version of the client.
 
 #### Benchmarks
 
 We have performed benchmarks comparing two merkle tree implementations, 
-the benchmark was done on 1 million leaves:
-1) Solana labs merkle tree: This implementation uses the BLAKE3 hashing algorithm and is
-   implemented purely in rust which can be found in the [Solana labs repository](https://github.com/solana-labs/solana/tree/master/merkle-tree)
-2) Firedancer binary merkle tree (bmtree): Implemented in C and uses firedancer's
-   SHA-256 implementation as it's hashing algorithm. However the benchmarks were
+the benchmark was done on 1 million leaves, each leaf consisted of a 64 byte signature and a single byte status.
+1) Solana Labs Merkle Tree: This is the pure rust implementation that is currently used by the Solana Labs client.
+   More details [Solana labs repository](https://github.com/solana-labs/solana/tree/master/merkle-tree)
+3) Firedancer binary merkle tree (bmtree): Implemented in C and uses firedancer's
+   optimised SHA-256 implementation as it's hashing algorithm. However the benchmarks were
    performed using its rust FFI bindings. More details: [Firedancer](https://github.com/firedancer-io/firedancer/tree/main/src/ballet/bmtree)
 <img width="1010" alt="r1" src="https://github.com/tinydancer-io/solana-improvement-documents/assets/50767810/6c8d0013-1d62-4c7b-8264-4ec71ea28d7c">
 
 More details with an attached flamegraph can be found in our [repository](https://github.com/tinydancer-io/merkle-bench).
+
+Despite the performance penalty of FFI we can still see that fd_bmtree32 is ~61%
+faster than the pure rust implementation which makes it fast enough to not impact
+consensus with decent headroom.
 
 ## Impact
 
@@ -99,6 +99,7 @@ network allowing users to access the blockchain in a trust minimized way unlike
 traditionally where users had to fully trust their RPC providers. Dapp developers
 don't have to make any changes as wallets can easily integrate the client making
 it compatible with any dapp. 
+
 The proposal would also be compatible with the future protocol updates like 
 Bankless leaders since the tree construction would be done async by buffering 
 transaction statuses. Bankless leaders won't need replay before propagating 
